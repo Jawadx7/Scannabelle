@@ -5,7 +5,7 @@ import cv2
 import numpy as np
 from typing import List, Tuple, Optional, Dict
 
-from omr_processing import image_utils, bubble_detector, grader
+from omr_processing import image_utils, bubble_detector, grader, answer_manager
 
 class OMRGraderGUI:
     def __init__(self, root: tk.Tk):
@@ -21,6 +21,8 @@ class OMRGraderGUI:
         # Variables
         self.image_path = tk.StringVar()
         self.results = []
+        self.answer_manager = answer_manager.AnswerManager()
+        self.answer_vars = {}
         
         # Create GUI components
         self.create_widgets()
@@ -46,7 +48,54 @@ class OMRGraderGUI:
         """
         # Title
         tk.Label(parent, text="OMR Sheet Grader", 
-                font=("Arial", 16), bg="#f0f0f0").pack(pady=20)
+                font=("Arial", 16), bg="#f0f0f0").pack(pady=10)
+        
+        # Answer Management Section
+        answer_frame = tk.LabelFrame(parent, text="Correct Answers", bg="#f0f0f0", padx=5, pady=5)
+        answer_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Create a canvas with scrollbar for answer inputs
+        canvas = tk.Canvas(answer_frame, bg="#f0f0f0", height=200)
+        scrollbar = tk.Scrollbar(answer_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg="#f0f0f0")
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # Create answer input fields (5 rows x 4 columns grid)
+        for i in range(20):
+            q_num = i + 1
+            row = i // 4
+            col = i % 4
+            
+            frame = tk.Frame(scrollable_frame, bg="#f0f0f0")
+            frame.grid(row=row, column=col, padx=2, pady=2)
+            
+            tk.Label(frame, text=f"Q{q_num}:", bg="#f0f0f0").pack(side=tk.LEFT)
+            var = tk.StringVar(value="A")
+            self.answer_vars[f"Q{q_num}"] = var
+            menu = tk.OptionMenu(frame, var, "A", "B", "C", "D", "E")
+            menu.config(width=2)
+            menu.pack(side=tk.LEFT)
+        
+        canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Answer Management Buttons
+        btn_frame = tk.Frame(answer_frame, bg="#f0f0f0")
+        btn_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Button(btn_frame, text="Save Answers", 
+                command=self.save_answers).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_frame, text="Load Answers", 
+                command=self.load_answers).pack(side=tk.LEFT, padx=2)
+        tk.Button(btn_frame, text="Clear", 
+                command=self.clear_answers).pack(side=tk.LEFT, padx=2)
         
         # Image Selection
         tk.Label(parent, text="Select OMR Sheet:", 
@@ -59,11 +108,11 @@ class OMRGraderGUI:
         # Processing Button
         tk.Button(parent, text="Grade OMR Sheet", 
                 command=self.process_image,
-                bg="#4CAF50", fg="white").pack(pady=20)
+                bg="#4CAF50", fg="white").pack(pady=10)
         
         # Results Display
         tk.Label(parent, text="Results:", bg="#f0f0f0").pack(pady=5)
-        self.results_text = tk.Text(parent, height=20, width=35)
+        self.results_text = tk.Text(parent, height=15, width=35)
         self.results_text.pack(pady=5)
     
     def _create_display_panel(self, parent: tk.Frame):
@@ -183,9 +232,8 @@ class OMRGraderGUI:
             # Detect answers
             answers, boxes = bubble_detector.analyze_answer_sheet(thresh)
             
-            # For demo purposes, using a dummy correct answer key
-            # In practice, this would be loaded from a configuration or database
-            correct_answers = [0] * 20  # All A's for demonstration
+            # Get correct answers from answer manager
+            correct_answers = self.answer_manager.get_grading_list()
             
             # Grade the answers
             grade_results = grader.grade_answers(answers, correct_answers)
@@ -197,6 +245,34 @@ class OMRGraderGUI:
             
         except Exception as e:
             messagebox.showerror("Processing Error", str(e))
+    
+    def save_answers(self):
+        """Save current answers to CSV file."""
+        for q_num in range(1, 21):
+            answer = self.answer_vars[f"Q{q_num}"].get()
+            self.answer_manager.set_answer(q_num, answer)
+        
+        self.answer_manager.save_to_csv()
+        messagebox.showinfo("Success", "Answers saved successfully")
+    
+    def load_answers(self):
+        """Load answers from CSV file."""
+        if self.answer_manager.load_from_csv():
+            # Update GUI with loaded answers
+            answers = self.answer_manager.get_all_answers()
+            for q_num in range(1, 21):
+                if f"Q{q_num}" in answers:
+                    self.answer_vars[f"Q{q_num}"].set(answers[f"Q{q_num}"])
+            messagebox.showinfo("Success", "Answers loaded successfully")
+        else:
+            messagebox.showwarning("Warning", "No saved answers found")
+    
+    def clear_answers(self):
+        """Clear all answers."""
+        for q_num in range(1, 21):
+            self.answer_vars[f"Q{q_num}"].set("A")
+        self.answer_manager.clear_answers()
+        messagebox.showinfo("Success", "Answers cleared")
     
     def display_results(self, results: List[str]):
         """Display grading results in the text widget.

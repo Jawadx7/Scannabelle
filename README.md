@@ -36,7 +36,7 @@ A Python-based Optical Mark Recognition (OMR) system for grading multiple-choice
 
 ```bash
 git clone https://github.com/Jawadx7/Scannabelle
-cd omr-grader
+cd scannabelle
 ```
 
 2. Install required packages:
