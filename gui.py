@@ -67,21 +67,21 @@ class OMRGraderGUI:
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
         canvas.configure(yscrollcommand=scrollbar.set)
         
-        # Create answer input fields (5 rows x 4 columns grid)
-        for i in range(20):
-            q_num = i + 1
-            row = i // 4
-            col = i % 4
-            
-            frame = tk.Frame(scrollable_frame, bg="#f0f0f0")
-            frame.grid(row=row, column=col, padx=2, pady=2)
-            
-            tk.Label(frame, text=f"Q{q_num}:", bg="#f0f0f0").pack(side=tk.LEFT)
-            var = tk.StringVar(value="A")
-            self.answer_vars[f"Q{q_num}"] = var
-            menu = tk.OptionMenu(frame, var, "A", "B", "C", "D", "E")
-            menu.config(width=2)
-            menu.pack(side=tk.LEFT)
+        # Question count control
+        count_frame = tk.Frame(scrollable_frame, bg="#f0f0f0")
+        count_frame.grid(row=0, column=0, columnspan=4, padx=2, pady=2)
+        tk.Label(count_frame, text="Number of Questions:", bg="#f0f0f0").pack(side=tk.LEFT)
+        self.question_count = tk.StringVar(value="20")
+        count_entry = tk.Entry(count_frame, textvariable=self.question_count, width=5)
+        count_entry.pack(side=tk.LEFT, padx=5)
+        tk.Button(count_frame, text="Update", command=self._update_answer_fields).pack(side=tk.LEFT, padx=5)
+        
+        # Create answer input fields container
+        self.answers_container = tk.Frame(scrollable_frame, bg="#f0f0f0")
+        self.answers_container.grid(row=1, column=0, columnspan=4, sticky="nsew")
+        
+        # Initialize with default 20 questions
+        self._create_answer_fields(20)
         
         canvas.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
@@ -201,54 +201,59 @@ class OMRGraderGUI:
     def process_image(self):
         """Process the selected image and display results."""
         if not self.image_path.get():
-            messagebox.showerror("Error", "Please select an image first")
-            return
-        
+                messagebox.showerror("Error", "Please select an image first")
+                return
+
         try:
             # Process image using utility functions
-            img_canny = image_utils.load_and_preprocess_image(self.image_path.get())
-            if img_canny is None:
-                raise Exception("Could not load image")
-            
-            # Find and process contours
-            rect_contours = image_utils.find_rectangle_contours(img_canny)
-            if not rect_contours:
-                raise Exception("No rectangular contours found")
-            
-            # Get and validate corner points
-            biggest_contour = image_utils.get_corner_points(rect_contours[0])
-            if biggest_contour is None:
-                raise Exception("Biggest contour not valid")
-            
-            # Reorder points and apply perspective transform
-            ordered_points = image_utils.reorder_points(biggest_contour)
-            img = cv2.imread(self.image_path.get())
-            img = cv2.resize(img, (600, 700))
-            warped = image_utils.apply_perspective_transform(img, ordered_points, 600, 700)
-            
-            # Threshold the image
-            thresh = image_utils.threshold_image(warped)
-            
-            # Detect answers
-            answers, boxes = bubble_detector.analyze_answer_sheet(thresh)
-            
-            # Get correct answers from answer manager
-            correct_answers = self.answer_manager.get_grading_list()
-            
-            # Grade the answers
-            grade_results = grader.grade_answers(answers, correct_answers)
-            result_strings = grader.format_results(grade_results, answers, correct_answers)
-            
-            # Display results
-            self.display_results(result_strings)
-            self.display_processed_images(img, warped, thresh)
-            
+                img_canny = image_utils.load_and_preprocess_image(self.image_path.get())
+                if img_canny is None:
+                    raise Exception("Could not load image")
+
+                # Find and process contours
+                rect_contours = image_utils.find_rectangle_contours(img_canny)
+                if not rect_contours:
+                    raise Exception("No rectangular contours found")
+
+                # Get and validate corner points
+                biggest_contour = image_utils.get_corner_points(rect_contours[0])
+                if biggest_contour is None:
+                    raise Exception("Biggest contour not valid")
+
+                # Reorder points and apply perspective transform
+                ordered_points = image_utils.reorder_points(biggest_contour)
+                img = cv2.imread(self.image_path.get())
+                img = cv2.resize(img, (600, 700))
+                warped = image_utils.apply_perspective_transform(img, ordered_points, 600, 700)
+
+                # Threshold the image
+                thresh = image_utils.threshold_image(warped)
+
+                # Detect answers
+                answers, boxes = bubble_detector.analyze_answer_sheet(thresh)
+
+                # Get correct answers from answer manager
+                correct_answers = self.answer_manager.get_grading_list()
+
+                # Convert student answer dict to list (fill missing with -1)
+                student_answers = [answers.get(i, -1) for i in range(len(correct_answers))]
+
+                # Grade the answers
+                grade_results = grader.grade_answers(student_answers, correct_answers)
+                result_strings = grader.format_results(grade_results, student_answers, correct_answers)
+
+                # Display results
+                self.display_results(result_strings)
+                self.display_processed_images(img, warped, thresh)
+
         except Exception as e:
             messagebox.showerror("Processing Error", str(e))
+
     
     def save_answers(self):
         """Save current answers to CSV file."""
-        for q_num in range(1, 21):
+        count = len(self.answer_vars)
+        for q_num in range(1, count + 1):
             answer = self.answer_vars[f"Q{q_num}"].get()
             self.answer_manager.set_answer(q_num, answer)
         
@@ -267,9 +272,48 @@ class OMRGraderGUI:
         else:
             messagebox.showwarning("Warning", "No saved answers found")
     
+    def _create_answer_fields(self, count: int):
+        """Create answer input fields based on question count.
+        
+        Args:
+            count: Number of questions to create fields for
+        """
+        # Clear existing fields
+        for widget in self.answers_container.winfo_children():
+            widget.destroy()
+        self.answer_vars.clear()
+        
+        # Create new fields (4 columns grid)
+        for i in range(count):
+            q_num = i + 1
+            row = i // 4
+            col = i % 4
+            
+            frame = tk.Frame(self.answers_container, bg="#f0f0f0")
+            frame.grid(row=row, column=col, padx=2, pady=2)
+            
+            tk.Label(frame, text=f"Q{q_num}:", bg="#f0f0f0").pack(side=tk.LEFT)
+            var = tk.StringVar(value="A")
+            self.answer_vars[f"Q{q_num}"] = var
+            menu = tk.OptionMenu(frame, var, "A", "B", "C", "D", "E")
+            menu.config(width=2)
+            menu.pack(side=tk.LEFT)
+    
+    def _update_answer_fields(self):
+        """Update answer fields based on question count input."""
+        try:
+            count = int(self.question_count.get())
+            if not (1 <= count <= 100):
+                raise ValueError("Question count must be between 1 and 100")
+            self._create_answer_fields(count)
+        except ValueError as e:
+            messagebox.showerror("Error", str(e))
+            self.question_count.set("20")
+    
     def clear_answers(self):
         """Clear all answers."""
-        for q_num in range(1, 21):
+        count = len(self.answer_vars)
+        for q_num in range(1, count + 1):
             self.answer_vars[f"Q{q_num}"].set("A")
         self.answer_manager.clear_answers()
         messagebox.showinfo("Success", "Answers cleared")

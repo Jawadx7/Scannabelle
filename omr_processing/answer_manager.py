@@ -76,14 +76,26 @@ class AnswerManager:
         """Convert stored answers to format needed by grader.
         
         Returns:
-            List of integers (0-4 for A-E) for grading
+            List of integers (0-4 for A-E) for grading. Default to 0 (A) for unanswered questions.
         """
         answer_list = []
-        for q_num in range(1, 21):  # Only first 20 questions for grading
+        # Find the highest question number that has an answer
+        max_question = 0
+        for q_key in self.answers.keys():
+            q_num = int(q_key.lstrip('Q'))
+            max_question = max(max_question, q_num)
+        
+        # If no answers are set, return an empty list
+        if max_question == 0:
+            return []
+        
+        # Generate the grading list up to the highest answered question
+        for q_num in range(1, max_question + 1):
             answer = self.get_answer(q_num)
             if answer:
                 # Convert A-E to 0-4
                 answer_list.append(ord(answer) - ord('A'))
             else:
-                answer_list.append(0)  # Default to A if not set
+                # Default to 0 (A) for unanswered questions to maintain list consistency
+                answer_list.append(0)
         return answer_list

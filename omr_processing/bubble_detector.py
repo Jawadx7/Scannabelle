@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
+from . import student_info_detector
 
 def split_answer_boxes(img: np.ndarray, rows: int = 20, cols: int = 5) -> List[np.ndarray]:
     """Split the thresholded image into individual answer boxes.
@@ -79,18 +80,33 @@ def validate_answer_boxes(boxes: List[np.ndarray], expected_questions: int = 20)
     """
     return len(boxes) == expected_questions * 5  # 5 options per question
 
-def analyze_answer_sheet(img: np.ndarray) -> Tuple[List[int], List[np.ndarray]]:
-    """Analyze an answer sheet image and return detected answers and boxes.
+def analyze_answer_sheet(img: np.ndarray) -> Tuple[Dict[str, str], Dict[str, str]]:
+    """Analyze an answer sheet image and return detected student info and answers.
     
     Args:
         img: Preprocessed and thresholded image
         
     Returns:
-        Tuple of (detected answers, answer boxes)
+        Tuple of (student details, answer dictionary)
     """
-    boxes = split_answer_boxes(img)
+    # Extract student information
+    student_details = student_info_detector.extract_student_details(img)
+    
+    # Extract answer section (assuming it starts after student info section)
+    h, w = img.shape[:2]
+    answer_section = img[int(0.3*h):, :]
+    
+    # Process answers
+    boxes = split_answer_boxes(answer_section)
     if not validate_answer_boxes(boxes):
         raise ValueError("Invalid number of answer boxes detected")
     
-    answers = detect_marked_answers(boxes)
-    return answers, boxes
+    marked_answers = detect_marked_answers(boxes)
+    
+    # Convert numeric answers to letter format
+    answer_dict = {}
+    for i, answer in enumerate(marked_answers):
+        if answer != -1:
+            answer_dict[f"Q{i+1}"] = chr(65 + answer)  # Convert 0-4 to A-E
+    
+    return student_details, answer_dict

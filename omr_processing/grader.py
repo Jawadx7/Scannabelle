@@ -10,10 +10,16 @@ def grade_answers(student_answers: List[int], correct_answers: List[int]) -> Dic
     Returns:
         Dictionary containing score information
     """
-    if len(student_answers) != len(correct_answers):
-        raise ValueError("Number of student answers does not match number of correct answers")
-    
+    # Use the number of correct answers as the total questions to grade
     total_questions = len(correct_answers)
+    
+    # Ensure student_answers is at least as long as correct_answers by padding with -1
+    if len(student_answers) < total_questions:
+        student_answers = student_answers + [-1] * (total_questions - len(student_answers))
+    
+    # Only grade up to the number of correct answers provided
+    student_answers = student_answers[:total_questions]
+    
     correct_count = sum(1 for s, c in zip(student_answers, correct_answers) if s == c)
     unanswered = sum(1 for ans in student_answers if ans == -1)
     incorrect = total_questions - correct_count - unanswered
