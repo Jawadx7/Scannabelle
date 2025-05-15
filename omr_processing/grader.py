@@ -54,6 +54,8 @@ def format_results(grading_results: Dict[str, float], student_answers: List[int]
         f"Score: {grading_results['score_percentage']:.2f}%",
         "\nDetailed Results:"
     ]
+
+    # print("Student Answers:", student_answers)
     
     for i, (student, correct) in enumerate(zip(student_answers, correct_answers)):
         status = "✓" if student == correct else "✗"

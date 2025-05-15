@@ -226,17 +226,22 @@ class OMRGraderGUI:
                 img = cv2.resize(img, (600, 700))
                 warped = image_utils.apply_perspective_transform(img, ordered_points, 600, 700)
 
-                # Threshold the image
+               # Threshold the image
                 thresh = image_utils.threshold_image(warped)
 
                 # Detect answers
-                answers, boxes = bubble_detector.analyze_answer_sheet(thresh)
+                answers = bubble_detector.analyze_answer_sheet(thresh)
+                print('Answers:', answers)
 
                 # Get correct answers from answer manager
                 correct_answers = self.answer_manager.get_grading_list()
 
                 # Convert student answer dict to list (fill missing with -1)
-                student_answers = [answers.get(i, -1) for i in range(len(correct_answers))]
+                # Note: Assuming `answers` is a dictionary with keys like 'Q1', 'Q2', etc.
+                student_answers = [answers.get(f"Q{i+1}", -1) for i in range(len(correct_answers))]
+                print("Student Answers:", student_answers)
+                print("Correct Answers:", correct_answers)
+
 
                 # Grade the answers
                 grade_results = grader.grade_answers(student_answers, correct_answers)

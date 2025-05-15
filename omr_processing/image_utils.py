@@ -68,17 +68,20 @@ def reorder_points(points: np.ndarray) -> np.ndarray:
     Returns:
         Reordered points
     """
+
     points = points.reshape((4, 2))
-    new_points = np.zeros((4, 1, 2), dtype=np.int32)
+    new_points = np.zeros((4, 2), dtype=np.float32)
+    
     add = points.sum(1)
     diff = np.diff(points, axis=1)
     
-    new_points[0] = points[np.argmin(add)]      # Top-left
-    new_points[3] = points[np.argmax(add)]      # Bottom-right
-    new_points[1] = points[np.argmin(diff)]     # Top-right
-    new_points[2] = points[np.argmax(diff)]     # Bottom-left
-    
+    new_points[0] = points[np.argmin(add)]  # Top-left
+    new_points[1] = points[np.argmin(diff)] # Top-right
+    new_points[2] = points[np.argmax(diff)] # Bottom-left
+    new_points[3] = points[np.argmax(add)]  # Bottom-right
+
     return new_points
+    
 
 def apply_perspective_transform(img: np.ndarray, points: np.ndarray, width: int, height: int) -> np.ndarray:
     """Apply perspective transform to get a top-down view of the OMR sheet.
@@ -93,21 +96,38 @@ def apply_perspective_transform(img: np.ndarray, points: np.ndarray, width: int,
         Transformed image
     """
     pts1 = np.float32(points)
-    pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
+    pts2 = np.float32([
+    [0, 0],           # Top-left
+    [width, 0],       # Top-right
+    [0, height],      # Bottom-left
+    [width, height]   # Bottom-right
+    ])
     matrix = cv2.getPerspectiveTransform(pts1, pts2)
     return cv2.warpPerspective(img, matrix, (width, height))
 
-def threshold_image(img: np.ndarray, thresh: int = 218, maxval: int = 250) -> np.ndarray:
-    """Apply binary thresholding to the image.
+def threshold_image(img: np.ndarray) -> np.ndarray:
+    """Apply adaptive thresholding to the image for better bubble detection.
     
     Args:
         img: Input image
-        thresh: Threshold value
-        maxval: Maximum value for pixels above threshold
         
     Returns:
         Thresholded image
     """
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    _, img_thresh = cv2.threshold(img_gray, thresh, maxval, cv2.THRESH_BINARY_INV)
+    # Apply contrast enhancement
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8,8))
+    img_enhanced = clahe.apply(img_gray)
+    # Apply Gaussian blur to reduce noise
+    img_blur = cv2.GaussianBlur(img_enhanced, (3, 3), 0)
+    # Apply adaptive thresholding
+    img_thresh = cv2.adaptiveThreshold(img_blur, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
     return img_thresh
+
+
+def load_and_preprocess_image_from_array(img: np.ndarray, width: int = 600, height: int = 700) -> Optional[np.ndarray]:
+    img = cv2.resize(img, (width, height))
+    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+    img_blur = cv2.GaussianBlur(img_gray, (5, 5), 1)
+    img_canny = cv2.Canny(img_blur, 10, 50)
+    return img_canny

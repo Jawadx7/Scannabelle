@@ -107,7 +107,6 @@ def main():
             return
         
         try:
-            # Your OMR processing code (slightly modified for the GUI)
             path = self.image_path.get()
             img = cv2.imread(path)
             if img is None:
@@ -142,12 +141,12 @@ def main():
             _, imgThresh = cv2.threshold(imgWarpGray, 218, 250, cv2.THRESH_BINARY_INV)
             
             # Process answer boxes
-            
             boxes = self.splitBoxes(imgThresh)
             answers = self.findShadedAnswers(boxes)
             
             # Display results
             self.display_results(answers)
+            # print("answers")
             self.display_processed_images(img, imgWarp, imgThresh)
             
         except Exception as e:
@@ -159,7 +158,7 @@ def main():
             result = f"Question {i+1}: {'ABCDE'[ans] if ans != -1 else 'No answer'}\n"
             self.results_text.insert(tk.END, result)
     
-    # Your OMR processing functions (copied from your code)
+    
     def rectContours(self, contours):
         rectCon = []
         for i in contours:

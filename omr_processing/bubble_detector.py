@@ -1,9 +1,9 @@
 import cv2
 import numpy as np
 from typing import List, Tuple, Optional, Dict
-from . import student_info_detector
+# from . import student_info_detector
 
-def split_answer_boxes(img: np.ndarray, rows: int = 20, cols: int = 5) -> List[np.ndarray]:
+def split_answer_boxes(img: np.ndarray, rows: int = 30, cols: int = 5) -> List[np.ndarray]:
     """Split the thresholded image into individual answer boxes.
     
     Args:
@@ -44,12 +44,12 @@ def split_answer_boxes(img: np.ndarray, rows: int = 20, cols: int = 5) -> List[n
     
     return boxes
 
-def detect_marked_answers(boxes: List[np.ndarray], threshold: int = 500) -> List[int]:
-    """Detect which answer bubbles are marked for each question.
+def detect_marked_answers(boxes: List[np.ndarray], threshold_ratio: float = 0.3) -> List[int]:
+    """Detect which answer bubbles are marked for each question using adaptive thresholding.
     
     Args:
         boxes: List of answer box images
-        threshold: Minimum pixel count to consider an answer marked
+        threshold_ratio: Ratio of max pixel count to consider an answer marked
         
     Returns:
         List of detected answers (-1 for unmarked questions)
@@ -57,12 +57,29 @@ def detect_marked_answers(boxes: List[np.ndarray], threshold: int = 500) -> List
     answers = []
     for q in range(0, len(boxes) // 5):
         current_boxes = boxes[q*5:(q+1)*5]
-        pixel_counts = [cv2.countNonZero(box) for box in current_boxes]
+        
+        # Apply adaptive thresholding to each box
+        processed_boxes = []
+        for box in current_boxes:
+            # Apply Gaussian blur to reduce noise
+            blurred = cv2.GaussianBlur(box, (3, 3), 0)
+            # Apply adaptive thresholding
+            adaptive = cv2.adaptiveThreshold(blurred, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY_INV, 11, 2)
+            processed_boxes.append(adaptive)
+        
+        # Count non-zero pixels
+        pixel_counts = [cv2.countNonZero(box) for box in processed_boxes]
+        max_count = max(pixel_counts)
         marked = np.argmax(pixel_counts)
         
-        # Check if the marked answer meets the threshold
-        if pixel_counts[marked] > threshold:
-            answers.append(marked)
+        # Use relative thresholding
+        if max_count > 0 and pixel_counts[marked] > max_count * threshold_ratio:
+            # Verify this is significantly higher than other options
+            sorted_counts = sorted(pixel_counts, reverse=True)
+            if len(sorted_counts) > 1 and sorted_counts[0] > sorted_counts[1] * 1.2:  # 20% higher than next highest
+                answers.append(marked)
+            else:
+                answers.append(-1)  # Multiple answers or unclear marking
         else:
             answers.append(-1)  # Not marked properly
     
@@ -80,24 +97,19 @@ def validate_answer_boxes(boxes: List[np.ndarray], expected_questions: int = 20)
     """
     return len(boxes) == expected_questions * 5  # 5 options per question
 
-def analyze_answer_sheet(img: np.ndarray) -> Tuple[Dict[str, str], Dict[str, str]]:
-    """Analyze an answer sheet image and return detected student info and answers.
+def analyze_answer_sheet(img: np.ndarray) -> Dict[str, str]:
+    """Analyze an answer sheet image and return detected answers.
     
     Args:
         img: Preprocessed and thresholded image
         
     Returns:
-        Tuple of (student details, answer dictionary)
+        Dictionary mapping question numbers to letter answers (A-E)
     """
-    # Extract student information
-    student_details = student_info_detector.extract_student_details(img)
-    
-    # Extract answer section (assuming it starts after student info section)
-    h, w = img.shape[:2]
-    answer_section = img[int(0.3*h):, :]
-    
     # Process answers
-    boxes = split_answer_boxes(answer_section)
+    boxes = split_answer_boxes(img)
+    print(f"Detected {len(boxes)} answer boxes")
+    # print("Boxes", boxes)
     if not validate_answer_boxes(boxes):
         raise ValueError("Invalid number of answer boxes detected")
     
@@ -109,4 +121,31 @@ def analyze_answer_sheet(img: np.ndarray) -> Tuple[Dict[str, str], Dict[str, str
         if answer != -1:
             answer_dict[f"Q{i+1}"] = chr(65 + answer)  # Convert 0-4 to A-E
     
-    return student_details, answer_dict
+    return answer_dict
+
+
+def extract_answers(warped_thresh: np.ndarray, num_questions: int = 20, num_choices: int = 5) -> dict:
+    """Extract answers from the thresholded image.
+    
+    Args:
+        warped_thresh: Thresholded image
+        num_questions: Number of questions
+        num_choices: Number of choices per question
+        
+    Returns:
+        Dictionary mapping question numbers to selected answers
+    """
+    # After processing all questions and determining answers
+    answers = {}
+    for q in range(num_questions):
+        # Add the answer to the dictionary
+        question_key = f"Q{q+1}"
+        answers[question_key] = selected_answer  # This might be a letter A-E or None
+    
+    # Print the extracted answers alongside question numbers
+    print("\n===== EXTRACTED STUDENT ANSWERS =====")
+    for q_num, answer in answers.items():
+        print(f"{q_num}: {answer if answer is not None else 'No answer detected'}")
+    print("====================================\n")
+    
+    return answers
